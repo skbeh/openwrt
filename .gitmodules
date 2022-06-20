@@ -1,0 +1,3 @@
+[submodule "package/kernel/nft-fullcone"]
+	path = package/kernel/nft-fullcone
+	url = https://github.com/fullcone-nat-nftables/nft-fullcone.git

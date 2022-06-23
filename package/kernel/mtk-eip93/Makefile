@@ -4,14 +4,11 @@ PKG_NAME:=mtk-eip93
 PKG_RELEASE:=1
 
 PKG_LICENSE:=GPLv2
-PKG_LICENSE_FILES:=
 
-PKG_SOURCE_URL:=https://github.com/vschagen/mtk-eip93.git
 PKG_SOURCE_PROTO:=git
+PKG_SOURCE_URL:=https://github.com/vschagen/mtk-eip93.git
 PKG_SOURCE_VERSION:=ca08387bf8352652129019bb19e2423ab313d5cb
 PKG_MIRROR_HASH:=4505ee2a175a6cf77a1a3b4fa7bf188da8f8b47894e5afa62c8cb008fbfa15ed
-
-PKG_BUILD_PARALLEL:=1
 
 MAKE_PATH:=crypto/mtk-eip93
 
@@ -32,6 +29,7 @@ define KernelPackage/crypto-hw-eip93
   TITLE:=MTK EIP93 crypto module.
   FILES:=$(PKG_BUILD_DIR)/$(MAKE_PATH)/crypto-hw-eip93.ko
   AUTOLOAD:=$(call AutoProbe,crypto-hw-eip93)
+  MENU:=1
 endef
 
 define KernelPackage/crypto-hw-eip93/description
@@ -41,12 +39,18 @@ It enables DES/3DES/AES ECB/CBC/CTR and
 IPSEC offload with authenc(hmac(sha1/sha256), aes/cbc/rfc3686)
 endef
 
+define KernelPackage/crypto-hw-eip93/config
+	source "$(SOURCE)/Config.in"
+endef
+
 EIP93_EXTRA_CFLAGS:= \
 	-D CONFIG_CRYPTO_DEV_EIP93_SKCIPHER=1 \
 	-D CONFIG_CRYPTO_DEV_EIP93_HMAC=1 \
 	-D CONFIG_CRYPTO_DEV_EIP93_AES=1 \
 	-D CONFIG_CRYPTO_DEV_EIP93_DES=1 \
-	-D CONFIG_CRYPTO_DEV_EIP93_AEAD=1
+	-D CONFIG_CRYPTO_DEV_EIP93_AEAD=1 \
+	-D CONFIG_MTK_EIP93_GENERIC_SW_MAX_LEN=$(CONFIG_MTK_EIP93_GENERIC_SW_MAX_LEN) \
+	-D CONFIG_MTK_EIP93_AES_128_SW_MAX_LEN=$(CONFIG_MTK_EIP93_AES_128_SW_MAX_LEN)
 EIP93_MAKE_FLAGS:= \
 	EXTRA_CFLAGS="$(EIP93_EXTRA_CFLAGS)" \
 	CONFIG_CRYPTO_DEV_EIP93=m \

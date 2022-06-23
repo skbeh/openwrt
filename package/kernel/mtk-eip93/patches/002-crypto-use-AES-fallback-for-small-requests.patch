@@ -1,4 +1,4 @@
-From fd1e1b34e8f66d6fecd829f93ab9c85ababfaf24 Mon Sep 17 00:00:00 2001
+From 6874c8e554978dcbb073e33d2b0346d0f40fa626 Mon Sep 17 00:00:00 2001
 From: Aviana Cruz <gwencroft@proton.me>
 Date: Tue, 21 Jun 2022 10:47:10 +0800
 Subject: [PATCH] crypto: use AES fallback for small requests
@@ -27,8 +27,8 @@ Signed-off-by: Aviana Cruz <gwencroft@proton.me>
  #include "eip93-common.h"
  #include "eip93-regs.h"
  
-+#define MTK_AES_128_SW_MAX_LEN 512
-+#define MTK_GENERIC_SW_MAX_LEN 256
++#define MTK_EIP93_GENERIC_SW_MAX_LEN CONFIG_MTK_EIP93_GENERIC_SW_MAX_LEN
++#define MTK_EIP93_AES_128_SW_MAX_LEN CONFIG_MTK_EIP93_AES_128_SW_MAX_LEN
 +
  void mtk_skcipher_handle_result(struct crypto_async_request *async, int err)
  {
@@ -131,8 +131,8 @@ Signed-off-by: Aviana Cruz <gwencroft@proton.me>
 +			return -EINVAL;
 +
 +	if (fallback &&
-+	    req->cryptlen <= (AES_KEYSIZE_128 ? MTK_AES_128_SW_MAX_LEN :
-+						      MTK_GENERIC_SW_MAX_LEN)) {
++	    req->cryptlen <= (AES_KEYSIZE_128 ? MTK_EIP93_AES_128_SW_MAX_LEN :
++						      MTK_EIP93_GENERIC_SW_MAX_LEN)) {
 +		skcipher_request_set_tfm(&rctx->fallback_req, ctx->fallback);
 +		skcipher_request_set_callback(&rctx->fallback_req,
 +					      req->base.flags,

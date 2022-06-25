@@ -427,7 +427,7 @@ endef
 define KernelPackage/mt7615-firmware/install
 	$(INSTALL_DIR) $(1)/lib/firmware/mediatek
 	cp \
-		$(PKG_BUILD_DIR)/firmware/mt7615_cr4.bin \
+		$(TOPDIR)/$(SOURCE)/firmware/mt7615_cr4.bin \
 		$(PKG_BUILD_DIR)/firmware/mt7615_n9.bin \
 		$(PKG_BUILD_DIR)/firmware/mt7615_rom_patch.bin \
 		$(if $(CONFIG_TARGET_mediatek_mt7622), \

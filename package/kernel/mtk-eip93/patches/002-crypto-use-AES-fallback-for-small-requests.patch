@@ -1,4 +1,4 @@
-From 6874c8e554978dcbb073e33d2b0346d0f40fa626 Mon Sep 17 00:00:00 2001
+From f39ee05bedc68cf80e76c69692f87b96bf5a3b51 Mon Sep 17 00:00:00 2001
 From: Aviana Cruz <gwencroft@proton.me>
 Date: Tue, 21 Jun 2022 10:47:10 +0800
 Subject: [PATCH] crypto: use AES fallback for small requests
@@ -6,9 +6,9 @@ Subject: [PATCH] crypto: use AES fallback for small requests
 Signed-off-by: Aviana Cruz <gwencroft@proton.me>
 ---
  crypto/mtk-eip93/eip93-aead.c   |  2 -
- crypto/mtk-eip93/eip93-cipher.c | 68 ++++++++++++++++++++++++++++++---
+ crypto/mtk-eip93/eip93-cipher.c | 66 ++++++++++++++++++++++++++++++---
  crypto/mtk-eip93/eip93-cipher.h |  3 ++
- 3 files changed, 65 insertions(+), 8 deletions(-)
+ 3 files changed, 63 insertions(+), 8 deletions(-)
 
 --- a/crypto/mtk-eip93/eip93-aead.c
 +++ b/crypto/mtk-eip93/eip93-aead.c
@@ -23,17 +23,7 @@ Signed-off-by: Aviana Cruz <gwencroft@proton.me>
  
 --- a/crypto/mtk-eip93/eip93-cipher.c
 +++ b/crypto/mtk-eip93/eip93-cipher.c
-@@ -18,6 +18,9 @@
- #include "eip93-common.h"
- #include "eip93-regs.h"
- 
-+#define MTK_EIP93_GENERIC_SW_MAX_LEN CONFIG_MTK_EIP93_GENERIC_SW_MAX_LEN
-+#define MTK_EIP93_AES_128_SW_MAX_LEN CONFIG_MTK_EIP93_AES_128_SW_MAX_LEN
-+
- void mtk_skcipher_handle_result(struct crypto_async_request *async, int err)
- {
- 	struct mtk_crypto_ctx *ctx = crypto_tfm_ctx(async->tfm);
-@@ -31,6 +34,13 @@ void mtk_skcipher_handle_result(struct c
+@@ -31,6 +31,13 @@ void mtk_skcipher_handle_result(struct c
  	skcipher_request_complete(req, err);
  }
  
@@ -47,7 +37,7 @@ Signed-off-by: Aviana Cruz <gwencroft@proton.me>
  static int mtk_skcipher_send_req(struct crypto_async_request *async)
  {
  	struct skcipher_request *req = skcipher_request_cast(async);
-@@ -53,11 +63,21 @@ static int mtk_skcipher_cra_init(struct
+@@ -53,11 +60,21 @@ static int mtk_skcipher_cra_init(struct
  	struct mtk_crypto_ctx *ctx = crypto_tfm_ctx(tfm);
  	struct mtk_alg_template *tmpl = container_of(tfm->__crt_alg,
  				struct mtk_alg_template, alg.skcipher.base);
@@ -72,7 +62,7 @@ Signed-off-by: Aviana Cruz <gwencroft@proton.me>
  	ctx->mtk = tmpl->mtk;
  
  	ctx->sa_in = kzalloc(sizeof(struct saRecord_s), GFP_KERNEL);
-@@ -86,6 +106,8 @@ static void mtk_skcipher_cra_exit(struct
+@@ -86,6 +103,8 @@ static void mtk_skcipher_cra_exit(struct
  			sizeof(struct saRecord_s), DMA_TO_DEVICE);
  	kfree(ctx->sa_in);
  	kfree(ctx->sa_out);
@@ -81,7 +71,7 @@ Signed-off-by: Aviana Cruz <gwencroft@proton.me>
  }
  
  static int mtk_skcipher_setkey(struct crypto_skcipher *ctfm, const u8 *key,
-@@ -105,6 +127,8 @@ static int mtk_skcipher_setkey(struct cr
+@@ -105,6 +124,8 @@ static int mtk_skcipher_setkey(struct cr
  	if (!key || !keylen)
  		return err;
  
@@ -90,7 +80,7 @@ Signed-off-by: Aviana Cruz <gwencroft@proton.me>
  #if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_AES)
  	if (IS_RFC3686(flags)) {
  		if (len < CTR_RFC3686_NONCE_SIZE)
-@@ -128,6 +152,14 @@ static int mtk_skcipher_setkey(struct cr
+@@ -128,6 +149,14 @@ static int mtk_skcipher_setkey(struct cr
  #if IS_ENABLED(CONFIG_CRYPTO_DEV_EIP93_AES)
  	if (flags & MTK_ALG_AES) {
  		struct crypto_aes_ctx aes;
@@ -105,7 +95,7 @@ Signed-off-by: Aviana Cruz <gwencroft@proton.me>
  
  		ctx->blksize = AES_BLOCK_SIZE;
  		err = aes_expandkey(&aes, key, keylen);
-@@ -160,16 +192,40 @@ static int mtk_skcipher_setkey(struct cr
+@@ -160,16 +189,41 @@ static int mtk_skcipher_setkey(struct cr
  	return err;
  }
  
@@ -131,8 +121,9 @@ Signed-off-by: Aviana Cruz <gwencroft@proton.me>
 +			return -EINVAL;
 +
 +	if (fallback &&
-+	    req->cryptlen <= (AES_KEYSIZE_128 ? MTK_EIP93_AES_128_SW_MAX_LEN :
-+						      MTK_EIP93_GENERIC_SW_MAX_LEN)) {
++	    req->cryptlen <= (AES_KEYSIZE_128 ?
++				      CONFIG_MTK_EIP93_AES_128_SW_MAX_LEN :
++				      CONFIG_MTK_EIP93_GENERIC_SW_MAX_LEN)) {
 +		skcipher_request_set_tfm(&rctx->fallback_req, ctx->fallback);
 +		skcipher_request_set_callback(&rctx->fallback_req,
 +					      req->base.flags,
@@ -141,13 +132,13 @@ Signed-off-by: Aviana Cruz <gwencroft@proton.me>
 +		skcipher_request_set_crypt(&rctx->fallback_req, req->src,
 +					   req->dst, req->cryptlen, req->iv);
 +		return encrypt ? crypto_skcipher_encrypt(&rctx->fallback_req) :
-+				       crypto_skcipher_decrypt(&rctx->fallback_req);
++				 crypto_skcipher_decrypt(&rctx->fallback_req);
 +	}
 +
  	rctx->assoclen = 0;
  	rctx->textsize = req->cryptlen;
  	rctx->authsize = 0;
-@@ -195,7 +251,7 @@ static int mtk_skcipher_encrypt(struct s
+@@ -195,7 +249,7 @@ static int mtk_skcipher_encrypt(struct s
  	rctx->flags |= MTK_ENCRYPT;
  	rctx->saRecord_base = ctx->sa_base_out;
  
@@ -156,7 +147,7 @@ Signed-off-by: Aviana Cruz <gwencroft@proton.me>
  }
  
  static int mtk_skcipher_decrypt(struct skcipher_request *req)
-@@ -209,7 +265,7 @@ static int mtk_skcipher_decrypt(struct s
+@@ -209,7 +263,7 @@ static int mtk_skcipher_decrypt(struct s
  	rctx->flags |= MTK_DECRYPT;
  	rctx->saRecord_base = ctx->sa_base_in;
  

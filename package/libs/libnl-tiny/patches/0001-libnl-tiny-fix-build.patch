@@ -1,0 +1,26 @@
+From 93a33ecad9a033ed4347ee1231b29ed4f630e977 Mon Sep 17 00:00:00 2001
+From: Aviana Cruz <gwencroft@proton.me>
+Date: Sat, 10 Sep 2022 01:01:15 +0800
+Subject: [PATCH] libnl-tiny: fix build
+
+Signed-off-by: Aviana Cruz <gwencroft@proton.me>
+---
+ CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index c780c96..68eac39 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -5,7 +5,7 @@ INCLUDE(GNUInstallDirs)
+ 
+ INCLUDE_DIRECTORIES(include)
+ 
+-ADD_DEFINITIONS(-Wall -Werror -Wextra -Wno-unused-parameter)
++ADD_DEFINITIONS(-Wall -Werror -Wextra -Wno-unused-parameter -Wno-error=stringop-truncation)
+ STRING(REPLACE "-DNDEBUG" "" CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE}")
+ 
+ SET(SOURCES
+-- 
+2.37.3
+

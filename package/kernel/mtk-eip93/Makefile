@@ -22,10 +22,12 @@ define KernelPackage/crypto-hw-eip93
   DEPENDS:= \
 	@TARGET_ramips_mt7621 \
 	+kmod-crypto-authenc \
+	+kmod-crypto-cbc \
 	+kmod-crypto-des \
 	+kmod-crypto-md5 \
 	+kmod-crypto-sha1 \
-	+kmod-crypto-sha256
+	+kmod-crypto-sha256 \
+	+kmod-crypto-sha512
   TITLE:=MTK EIP93 crypto module.
   FILES:=$(PKG_BUILD_DIR)/$(MAKE_PATH)/crypto-hw-eip93.ko
   AUTOLOAD:=$(call AutoProbe,crypto-hw-eip93)

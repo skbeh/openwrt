@@ -144,9 +144,6 @@ IPv6 traffic do NOT need this FullCone NAT functionality.
 +			delete defs.fullcone;
 +			warn("nft_try_fullcone failed, disable fullcone globally\n");
 +		}
-+		if (this.state.defaults && !this.state.defaults.fullcone) {
-+			this.warn_section(data, "fullcone enabled");
-+		}
 +
  		this.state.defaults = defs;
  	},
@@ -198,7 +195,7 @@ IPv6 traffic do NOT need this FullCone NAT functionality.
  			for (let helper in (length(zone.helper) ? zone.helper : this.state.helpers)) {
 --- a/root/usr/share/firewall4/templates/ruleset.uc
 +++ b/root/usr/share/firewall4/templates/ruleset.uc
-@@ -310,6 +310,12 @@ table inet fw4 {
+@@ -313,6 +313,12 @@ table inet fw4 {
  {%   for (let redirect in fw4.redirects(`dstnat_${zone.name}`)): %}
  		{%+ include("redirect.uc", { fw4, redirect }) %}
  {%   endfor %}
@@ -211,7 +208,7 @@ IPv6 traffic do NOT need this FullCone NAT functionality.
  {%   fw4.includes('chain-append', `dstnat_${zone.name}`) %}
  	}
  
-@@ -320,20 +326,26 @@ table inet fw4 {
+@@ -323,20 +329,26 @@ table inet fw4 {
  {%   for (let redirect in fw4.redirects(`srcnat_${zone.name}`)): %}
  		{%+ include("redirect.uc", { fw4, redirect }) %}
  {%   endfor %}

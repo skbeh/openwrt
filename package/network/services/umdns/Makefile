@@ -19,6 +19,8 @@ PKG_MIRROR_HASH:=7314ac31559b16d34d381f001037d9679c48778d2738948c8bd361aeab491c2
 PKG_MAINTAINER:=John Crispin <john@phrozen.org>
 PKG_LICENSE:=LGPL-2.1
 
+PKG_BUILD_FLAGS:=lto
+
 include $(INCLUDE_DIR)/package-seccomp.mk
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/cmake.mk

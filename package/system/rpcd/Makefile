@@ -22,6 +22,8 @@ PKG_LICENSE_FILES:=
 
 PKG_ASLR_PIE_REGULAR:=1
 
+PKG_BUILD_FLAGS:=lto
+
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/cmake.mk
 

@@ -1,0 +1,79 @@
+From 8f993b04f47e1d64fc2b81c9917662c02fdaf9dd Mon Sep 17 00:00:00 2001
+From: skbeh <60107333+skbeh@users.noreply.github.com>
+Date: Thu, 13 Mar 2025 01:57:19 +0000
+Subject: [PATCH] add option to customize and disable sni
+
+The code is adopted from https://github.com/SagerNet/sing-box.
+
+Close https://github.com/IrineSistiana/mosdns/issues/860.
+---
+ plugin/executable/forward/forward.go | 38 ++++++++++++++++++++++++----
+ 1 file changed, 33 insertions(+), 5 deletions(-)
+
+--- a/plugin/executable/forward/forward.go
++++ b/plugin/executable/forward/forward.go
+@@ -22,6 +22,7 @@ package fastforward
+ import (
+ 	"context"
+ 	"crypto/tls"
++	"crypto/x509"
+ 	"errors"
+ 	"fmt"
+ 	"strings"
+@@ -70,10 +71,12 @@ type UpstreamConfig struct {
+ 
+ 	// Deprecated: This option has no affect.
+ 	// TODO: (v6) Remove this option.
+-	MaxConns           int  `yaml:"max_conns"`
+-	EnablePipeline     bool `yaml:"enable_pipeline"`
+-	EnableHTTP3        bool `yaml:"enable_http3"`
+-	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
++	MaxConns           int    `yaml:"max_conns"`
++	EnablePipeline     bool   `yaml:"enable_pipeline"`
++	EnableHTTP3        bool   `yaml:"enable_http3"`
++	InsecureSkipVerify bool   `yaml:"insecure_skip_verify"`
++	ServerName         string `yaml:"server_name"`
++	DisableSNI         bool   `yaml:"disable_sni"`
+ 
+ 	Socks5       string `yaml:"socks5"`
+ 	SoMark       int    `yaml:"so_mark"`
+@@ -152,13 +155,38 @@ func NewForward(args *Args, opt Opts) (*
+ 			Bootstrap:      c.Bootstrap,
+ 			BootstrapVer:   c.BootstrapVer,
+ 			TLSConfig: &tls.Config{
+-				InsecureSkipVerify: c.InsecureSkipVerify,
++				InsecureSkipVerify: c.InsecureSkipVerify || c.DisableSNI,
+ 				ClientSessionCache: tls.NewLRUClientSessionCache(4),
+ 			},
+ 			Logger:        opt.Logger,
+ 			EventObserver: uw,
+ 		}
+ 
++		if c.DisableSNI {
++			uOpt.TLSConfig.ServerName = "127.0.0.1"
++			if !c.InsecureSkipVerify {
++				var serverName string
++				if c.ServerName == "" {
++					return nil, errors.New("missing server_name or insecure_skip_verify=true")
++				} else {
++					serverName = c.ServerName
++				}
++				uOpt.TLSConfig.VerifyConnection = func(state tls.ConnectionState) error {
++					verifyOptions := x509.VerifyOptions{
++						DNSName:       serverName,
++						Intermediates: x509.NewCertPool(),
++					}
++					for _, cert := range state.PeerCertificates[1:] {
++						verifyOptions.Intermediates.AddCert(cert)
++					}
++					_, err := state.PeerCertificates[0].Verify(verifyOptions)
++					return err
++				}
++			}
++		} else if c.ServerName != "" {
++			uOpt.TLSConfig.ServerName = c.ServerName
++		}
++
+ 		u, err := upstream.NewUpstream(c.Addr, uOpt)
+ 		if err != nil {
+ 			_ = f.Close()

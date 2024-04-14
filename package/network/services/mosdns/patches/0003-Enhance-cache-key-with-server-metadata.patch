@@ -1,0 +1,84 @@
+From c3180fca77eb9dac00c5f0900962e6b78aecaeaa Mon Sep 17 00:00:00 2001
+From: skbeh <60107333+skbeh@users.noreply.github.com>
+Date: Sun, 30 Mar 2025 07:51:24 +0000
+Subject: [PATCH 3/3] Enhance cache key with server metadata
+
+---
+ plugin/executable/dual_selector/cache.go      | 28 +++++++++++++++++--
+ .../executable/dual_selector/dual_selector.go | 20 +++++++++++--
+ 2 files changed, 44 insertions(+), 4 deletions(-)
+
+--- a/plugin/executable/dual_selector/cache.go
++++ b/plugin/executable/dual_selector/cache.go
+@@ -2,10 +2,34 @@ package dual_selector
+ 
+ import "hash/maphash"
+ 
+-type key string
++type ServerQueryMeta struct {
++	ServerName  string
++	UrlPath     string
++	Edns0Subnet string
++}
++
++type key struct {
++	DomainName string
++	Meta       ServerQueryMeta
++}
+ 
+ var seed = maphash.MakeSeed()
+ 
+ func (k key) Sum() uint64 {
+-	return maphash.String(seed, string(k))
++	var h maphash.Hash
++
++	h.SetSeed(seed)
++
++	_, _ = h.WriteString(k.DomainName)
++	_ = h.WriteByte(0)
++
++	_, _ = h.WriteString(k.Meta.ServerName)
++	_ = h.WriteByte(0)
++
++	_, _ = h.WriteString(k.Meta.UrlPath)
++	_ = h.WriteByte(0)
++
++	_, _ = h.WriteString(k.Meta.Edns0Subnet)
++
++	return h.Sum64()
+ }
+--- a/plugin/executable/dual_selector/dual_selector.go
++++ b/plugin/executable/dual_selector/dual_selector.go
+@@ -75,14 +75,30 @@ func (s *Selector) Exec(ctx context.Cont
+ 		return next.ExecNext(ctx, qCtx)
+ 	}
+ 
+-	qName := key(q.Question[0].Name)
++	var subnet string
++	if clientOpt := qCtx.ClientOpt(); clientOpt != nil {
++		for _, o := range clientOpt.Option {
++			if o.Option() == dns.EDNS0SUBNET {
++				subnet = o.String()
++				break
++			}
++		}
++	}
++	qName := key{
++		DomainName: q.Question[0].Name,
++		Meta: ServerQueryMeta{
++			ServerName:  qCtx.ServerMeta.ServerName,
++			UrlPath:     qCtx.ServerMeta.UrlPath,
++			Edns0Subnet: subnet,
++		},
++	}
+ 	if qtype == s.prefer {
+ 		err := next.ExecNext(ctx, qCtx)
+ 		if err != nil {
+ 			return err
+ 		}
+ 
+-		if r := qCtx.R(); r != nil && msgAnsHasRR(r, s.prefer) {
++		if r := qCtx.R(); r != nil && r.Rcode == dns.RcodeSuccess && msgAnsHasRR(r, s.prefer) {
+ 			s.preferTypOkCache.Store(qName, true, time.Now().Add(cacheTlt))
+ 		}
+ 		return nil

@@ -124,6 +124,7 @@ platform_do_upgrade() {
 	gatonetworks,gdsp|\
 	globitel,bt-r320|\
 	h3c,magic-nx30-pro|\
+	h3c,magic-nx30-pro-114m-ubootmod|\
 	imou,hx21|\
 	jcg,q30-pro|\
 	jdcloud,re-cp-03|\
@@ -338,6 +339,7 @@ platform_check_image() {
 	gatonetworks,gdsp|\
 	globitel,bt-r320|\
 	h3c,magic-nx30-pro|\
+	h3c,magic-nx30-pro-114m-ubootmod|\
 	jcg,q30-pro|\
 	jdcloud,re-cp-03|\
 	konka,komi-a31|\

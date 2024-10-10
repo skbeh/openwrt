@@ -1800,10 +1800,8 @@ define Device/globitel_bt-r320
 endef
 TARGET_DEVICES += globitel_bt-r320
 
-define Device/h3c_magic-nx30-pro
+define Device/h3c_magic-nx30-pro-common
   DEVICE_VENDOR := H3C
-  DEVICE_MODEL := Magic NX30 Pro
-  DEVICE_DTS := mt7981b-h3c-magic-nx30-pro
   DEVICE_DTS_DIR := ../dts
   UBINIZE_OPTS := -E 5
   BLOCKSIZE := 128k
@@ -1819,11 +1817,27 @@ define Device/h3c_magic-nx30-pro
   IMAGE/sysupgrade.itb := append-kernel | \
 	fit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-static-with-rootfs | append-metadata
   DEVICE_PACKAGES := kmod-mt7915e kmod-mt7981-firmware mt7981-wo-firmware
+endef
+
+define Device/h3c_magic-nx30-pro
+  DEVICE_MODEL := Magic NX30 Pro (Stock U-Boot layout)
+  DEVICE_DTS := mt7981b-h3c-magic-nx30-pro
   ARTIFACTS := preloader.bin bl31-uboot.fip
   ARTIFACT/preloader.bin := mt7981-bl2 spim-nand-ddr3
   ARTIFACT/bl31-uboot.fip := mt7981-bl31-uboot h3c_magic-nx30-pro
+  $(call Device/h3c_magic-nx30-pro-common)
 endef
 TARGET_DEVICES += h3c_magic-nx30-pro
+
+define Device/h3c_magic-nx30-pro-114m-ubootmod
+  DEVICE_MODEL := Magic NX30 Pro (114M UBI layout)
+  DEVICE_DTS := mt7981b-h3c-magic-nx30-pro-114m-ubootmod
+  ARTIFACTS := preloader.bin bl31-uboot.fip
+  ARTIFACT/preloader.bin := mt7981-bl2 spim-nand-ddr3
+  ARTIFACT/bl31-uboot.fip := mt7981-bl31-uboot h3c_magic-nx30-pro-114m-ubootmod
+  $(call Device/h3c_magic-nx30-pro-common)
+endef
+TARGET_DEVICES += h3c_magic-nx30-pro-114m-ubootmod
 
 define Device/hiveton_h5000m
   DEVICE_VENDOR := Hiveton

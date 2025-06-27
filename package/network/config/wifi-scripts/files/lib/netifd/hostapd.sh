@@ -44,7 +44,7 @@ hostapd_append_wpa_key_mgmt() {
 		psk|eap)
 			append wpa_key_mgmt "WPA-$auth_type_l"
 			[ "${wpa:-2}" -ge 2 ] && [ "${ieee80211r:-0}" -gt 0 ] && append wpa_key_mgmt "FT-${auth_type_l}"
-			[ "${ieee80211w:-0}" -gt 0 ] && append wpa_key_mgmt "WPA-${auth_type_l}-SHA256"
+			[ "${ieee80211w:-0}" -gt 1 ] && append wpa_key_mgmt "WPA-${auth_type_l}-SHA256"
 		;;
 		eap192)
 			append wpa_key_mgmt "WPA-EAP-SUITE-B-192"
@@ -635,7 +635,6 @@ hostapd_set_bss_options() {
 	json_for_each_item append_radius_acct_req_attr radius_acct_req_attr
 
 	[ -n "$ocv" ] && append bss_conf "ocv=$ocv" "$N"
-	[ -n "$beacon_prot" ] && append bss_conf "beacon_prot=$beacon_prot" "$N"
 	[ -n "$spp_amsdu" ] && append bss_conf "spp_amsdu=$spp_amsdu" "$N"
 
 	case "$auth_type" in
@@ -695,7 +694,7 @@ hostapd_set_bss_options() {
 				append bss_conf "wpa_psk_file=$wpa_psk_file" "$N"
 			}
 			[ -z "$sae_password_file" ] && set_default sae_password_file /var/run/hostapd-$ifname.sae
-			[ -n "$sae_password_file" ] && [ "$auth_type" = "sae" -o "$auth_type" = "psk-sae" ] && {
+			[ -n "$sae_password_file" ] && [ "$auth_type" = "sae" -o "$auth_type" = "psk-sae" -o "$auth_type" = "psk" ] && {
 				[ -e "$sae_password_file" ] || touch "$sae_password_file"
 				append bss_conf "sae_password_file=$sae_password_file" "$N"
 			}
@@ -1016,6 +1015,8 @@ hostapd_set_bss_options() {
 					else
 						append bss_conf "group_mgmt_cipher=${ieee80211w_mgmt_cipher:-AES-128-CMAC}" "$N"
 					fi
+					set_default beacon_prot 1
+					[ -n "$beacon_prot" ] && append bss_conf "beacon_prot=$beacon_prot" "$N"
 					[ -n "$ieee80211w_max_timeout" ] && \
 						append bss_conf "assoc_sa_query_max_timeout=$ieee80211w_max_timeout" "$N"
 					[ -n "$ieee80211w_retry_timeout" ] && \

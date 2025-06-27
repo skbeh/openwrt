@@ -132,7 +132,7 @@ export function wpa_key_mgmt(config, band) {
 		append_value(config, 'wpa_key_mgmt', 'WPA-PSK');
 		if (config.wpa >= 2 && config.ieee80211r)
 			append_value(config, 'wpa_key_mgmt', 'FT-PSK');
-		if (config.ieee80211w)
+		if (config.ieee80211w > 1)
 			append_value(config, 'wpa_key_mgmt', 'WPA-PSK-SHA256');
 		break;
 
@@ -140,7 +140,7 @@ export function wpa_key_mgmt(config, band) {
 		append_value(config, 'wpa_key_mgmt', 'WPA-EAP');
 		if (config.wpa >= 2 && config.ieee80211r)
 			append_value(config, 'wpa_key_mgmt', 'FT-EAP');
-		if (config.ieee80211w)
+		if (config.ieee80211w > 1)
 			append_value(config, 'wpa_key_mgmt', 'WPA-EAP-SHA256');
 		break;
 

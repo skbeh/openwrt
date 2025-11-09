@@ -1,0 +1,264 @@
+From 3e8c49c1948796aab59efee6ad7b766b61abfb67 Mon Sep 17 00:00:00 2001
+From: skbeh <60107333+skbeh@users.noreply.github.com>
+Date: Sun, 9 Nov 2025 11:50:15 +0000
+Subject: [PATCH] feat: Add customizable SNI support
+
+---
+ src/config.rs               |  29 +++++++++
+ src/transport/native_tls.rs |  20 ++++--
+ src/transport/rustls.rs     | 121 ++++++++++++++++++++++++++++++++----
+ 3 files changed, 153 insertions(+), 17 deletions(-)
+
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -114,10 +114,20 @@ impl ServerServiceConfig {
+         }
+     }
+ }
++
++#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
++#[serde(deny_unknown_fields)]
++pub struct SniConfig {
++    #[serde(default)]
++    pub enabled: bool,
++    pub server_name: Option<String>,
++}
++
+ #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+ #[serde(deny_unknown_fields)]
+ pub struct TlsConfig {
+     pub hostname: Option<String>,
++    pub sni: Option<SniConfig>,
+     pub trusted_root: Option<String>,
+     pub pkcs12: Option<String>,
+     pub pkcs12_password: Option<MaskedString>,
+@@ -316,6 +326,9 @@ impl Config {
+                         .and(tls_config.pkcs12_password.as_ref())
+                         .ok_or_else(|| anyhow!("Missing `pkcs12` or `pkcs12_password`"))?;
+                 }
++
++                Config::validate_sni_config(tls_config)?;
++
+                 Ok(())
+             }
+             TransportType::Noise => {
+@@ -326,6 +339,22 @@ impl Config {
+         }
+     }
+ 
++    fn validate_sni_config(tls_config: &TlsConfig) -> Result<()> {
++        if let Some(sni_config) = &tls_config.sni {
++            #[cfg(feature = "native-tls")]
++            if sni_config.enabled && sni_config.server_name.is_some() {
++                bail!("server_name is not supported with native-tls transport. Use rustls feature or remove server_name");
++            }
++
++            if !sni_config.enabled {
++                if sni_config.server_name.is_some() {
++                    bail!("SNI is disabled but server_name is set");
++                }
++            }
++        }
++        Ok(())
++    }
++
+     pub async fn from_file(path: &Path) -> Result<Config> {
+         let s: String = fs::read_to_string(path)
+             .await
+--- a/src/transport/native_tls.rs
++++ b/src/transport/native_tls.rs
+@@ -37,14 +37,26 @@ impl Transport for TlsTransport {
+                     .with_context(|| "Failed to read the `tls.trusted_root`")?;
+                 let cert = Certificate::from_pem(s.as_bytes())
+                     .with_context(|| "Failed to read certificate from `tls.trusted_root`")?;
+-                let connector = native_tls::TlsConnector::builder()
+-                    .add_root_certificate(cert)
+-                    .build()?;
++
++                let mut builder = native_tls::TlsConnector::builder();
++                builder.add_root_certificate(cert);
++
++                if let Some(sni_config) = &config.sni {
++                    builder.use_sni(sni_config.enabled);
++                }
++
++                let connector = builder.build()?;
+                 Some(TlsConnector::from(connector))
+             }
+             None => {
+                 // if no trusted_root is specified, allow TlsConnector to use system default
+-                let connector = native_tls::TlsConnector::builder().build()?;
++                let mut builder = native_tls::TlsConnector::builder();
++
++                if let Some(sni_config) = &config.sni {
++                    builder.use_sni(sni_config.enabled);
++                }
++
++                let connector = builder.build()?;
+                 Some(TlsConnector::from(connector))
+             }
+         };
+--- a/src/transport/rustls.rs
++++ b/src/transport/rustls.rs
+@@ -7,6 +7,10 @@ use std::net::SocketAddr;
+ use std::sync::Arc;
+ use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
+ use tokio_rustls::rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer, ServerName};
++use tokio_rustls::rustls::{
++    client::danger::HandshakeSignatureValid, client::danger::ServerCertVerified,
++    client::danger::ServerCertVerifier, DigitallySignedStruct, SignatureScheme,
++};
+ 
+ use anyhow::{anyhow, Context, Result};
+ use async_trait::async_trait;
+@@ -32,6 +36,59 @@ impl Debug for TlsTransport {
+     }
+ }
+ 
++#[derive(Debug)]
++struct SniCertVerifier {
++    default_verifier: Arc<dyn ServerCertVerifier>,
++    hostname: String,
++}
++
++impl ServerCertVerifier for SniCertVerifier {
++    fn verify_server_cert(
++        &self,
++        end_entity: &CertificateDer<'_>,
++        intermediates: &[CertificateDer<'_>],
++        _server_name: &ServerName<'_>,
++        ocsp_response: &[u8],
++        now: tokio_rustls::rustls::pki_types::UnixTime,
++    ) -> Result<ServerCertVerified, tokio_rustls::rustls::Error> {
++        let original_server_name = ServerName::try_from(self.hostname.as_str()).map_err(|_| {
++            tokio_rustls::rustls::Error::General(format!("Invalid hostname: {}", self.hostname))
++        })?;
++
++        self.default_verifier.verify_server_cert(
++            end_entity,
++            intermediates,
++            &original_server_name,
++            ocsp_response,
++            now,
++        )
++    }
++
++    fn verify_tls12_signature(
++        &self,
++        message: &[u8],
++        cert: &CertificateDer<'_>,
++        dss: &DigitallySignedStruct,
++    ) -> Result<HandshakeSignatureValid, tokio_rustls::rustls::Error> {
++        self.default_verifier
++            .verify_tls12_signature(message, cert, dss)
++    }
++
++    fn verify_tls13_signature(
++        &self,
++        message: &[u8],
++        cert: &CertificateDer<'_>,
++        dss: &DigitallySignedStruct,
++    ) -> Result<HandshakeSignatureValid, tokio_rustls::rustls::Error> {
++        self.default_verifier
++            .verify_tls13_signature(message, cert, dss)
++    }
++
++    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
++        self.default_verifier.supported_verify_schemes()
++    }
++}
++
+ fn load_server_config(config: &TlsConfig) -> Result<Option<ServerConfig>> {
+     if let Some(pkcs12_path) = config.pkcs12.as_ref() {
+         let buf = fs::read(pkcs12_path)?;
+@@ -55,15 +112,17 @@ fn load_server_config(config: &TlsConfig
+ }
+ 
+ fn load_client_config(config: &TlsConfig) -> Result<Option<ClientConfig>> {
+-    let cert = if let Some(path) = config.trusted_root.as_ref() {
+-        rustls_pemfile::certs(&mut std::io::BufReader::new(fs::File::open(path).unwrap()))
+-            .map(|cert| cert.unwrap())
+-            .next()
+-            .with_context(|| "Failed to read certificate")?
++    let certs = if let Some(path) = config.trusted_root.as_ref() {
++        vec![
++            rustls_pemfile::certs(&mut std::io::BufReader::new(fs::File::open(path).unwrap()))
++                .map(|cert| cert.unwrap())
++                .next()
++                .with_context(|| "Failed to read certificate")?,
++        ]
+     } else {
+         // read from native
+         match rustls_native_certs::load_native_certs() {
+-            Ok(certs) => certs.into_iter().next().unwrap(),
++            Ok(certs) => certs,
+             Err(e) => {
+                 eprintln!("Failed to load native certs: {}", e);
+                 return Ok(None);
+@@ -72,7 +131,37 @@ fn load_client_config(config: &TlsConfig
+     };
+ 
+     let mut root_certs = RootCertStore::empty();
+-    root_certs.add(cert).unwrap();
++    root_certs.add_parsable_certificates(certs);
++
++    if let Some(sni_config) = &config.sni {
++        if sni_config.enabled {
++            if let Some(original_hostname) = &config.hostname {
++                let default_verifier = tokio_rustls::rustls::client::WebPkiServerVerifier::builder(
++                    Arc::new(root_certs),
++                )
++                .build()
++                .with_context(|| "Failed to build default verifier")?;
++
++                let custom_verifier = Arc::new(SniCertVerifier {
++                    default_verifier,
++                    hostname: original_hostname.to_string(),
++                });
++
++                return Ok(Some(
++                    ClientConfig::builder()
++                        .dangerous()
++                        .with_custom_certificate_verifier(custom_verifier)
++                        .with_no_client_auth(),
++                ));
++            }
++        } else {
++            let mut builder = ClientConfig::builder()
++                .with_root_certificates(root_certs)
++                .with_no_client_auth();
++            builder.enable_sni = false;
++            return Ok(Some(builder));
++        }
++    }
+ 
+     Ok(Some(
+         ClientConfig::builder()
+@@ -137,15 +226,21 @@ impl Transport for TlsTransport {
+ 
+         let connector = self.connector.as_ref().unwrap();
+ 
+-        let host_name = self
+-            .config
+-            .hostname
+-            .as_deref()
+-            .unwrap_or(host_port_pair(&addr.addr)?.0);
++        let sni_hostname = if let Some(sni_config) = &self.config.sni {
++            if sni_config.enabled {
++                sni_config.server_name.as_deref()
++            } else {
++                None
++            }
++        } else {
++            None
++        }
++        .or_else(|| self.config.hostname.as_deref())
++        .unwrap_or_else(|| host_port_pair(&addr.addr).unwrap().0);
+ 
+         Ok(tokio_rustls::TlsStream::Client(
+             connector
+-                .connect(ServerName::try_from(host_name)?.to_owned(), conn)
++                .connect(ServerName::try_from(sni_hostname)?.to_owned(), conn)
+                 .await?,
+         ))
+     }
